@@ -1,28 +1,49 @@
 import native from '../native/build/Release/ioctl.node'
 
-export type MaybeBigInt = number | bigint
-export type MaybeBufferPointer = Buffer | MaybeBigInt
-
 /**
  * Perform an `ioctl` syscall using the libuv thread pool.
  * Meant for immediate `ioctl` calls.
  **/
 export async function ioctl(
-    fd: MaybeBigInt,
-    request: MaybeBigInt,
-    data?: MaybeBufferPointer,
+    fd: number,
+    request: number | bigint,
+    data?: number | bigint | Buffer,
 ) {
     const [result] = await ioctl.batch([fd, request, data])
 
     return result
 }
 
+const BaseError = Error
+
 export namespace ioctl {
+    export class Error extends BaseError {
+        public readonly fd: number
+        public readonly code: number
+        public readonly request: bigint
+
+        constructor({
+            fd,
+            code,
+            request,
+        }: {
+            fd: number
+            code: number
+            request: number | bigint
+        }) {
+            super(`error ${code} running ioctl(${fd}, ${request})`)
+
+            this.fd = fd
+            this.code = code
+            this.request = BigInt(request)
+        }
+    }
+
     export async function batch(
         ...calls: [
-            fd: MaybeBigInt,
-            request: MaybeBigInt,
-            data?: MaybeBufferPointer,
+            fd: number,
+            request: number | bigint,
+            data?: number | bigint | Buffer,
         ][]
     ) {
         return await new Promise<number[]>((resolve, reject) => {
@@ -36,15 +57,11 @@ export namespace ioctl {
                     (results: [error: number, result: number][]) => {
                         try {
                             resolve(
-                                results.map(([error, result]) => {
+                                results.map(([code, result], index) => {
                                     if (result == -1) {
-                                        const err: any = new Error(
-                                            `Error ${error} running ioctl`,
-                                        )
+                                        const [fd, request] = calls[index]
 
-                                        err.code = error
-
-                                        throw err
+                                        throw new Error({ fd, code, request })
                                     } else {
                                         return result
                                     }
@@ -66,17 +83,25 @@ export namespace ioctl {
      * Meant for blocking/long-running `ioctl` calls.
      **/
     export async function blocking(
-        fd: MaybeBigInt,
-        request: MaybeBigInt,
-        data?: MaybeBufferPointer,
+        fd: number,
+        request: number | bigint,
+        data?: number | bigint | Buffer,
     ) {
         return await new Promise<number>((resolve, reject) => {
             try {
+                const requestInt = BigInt(request)
+
                 native.blocking(
                     BigInt(fd),
-                    BigInt(request),
+                    requestInt,
                     pointer(data),
-                    complete(resolve, reject),
+                    (code: number, result: number) => {
+                        if (result == -1) {
+                            reject(new Error({ fd, code, request: requestInt }))
+                        } else {
+                            resolve(result)
+                        }
+                    },
                 )
             } catch (error) {
                 reject(error)
@@ -85,24 +110,7 @@ export namespace ioctl {
     }
 }
 
-function complete(
-    resolve: (result: number) => void,
-    reject: (error: Error) => void,
-) {
-    return (error: number, result: number) => {
-        if (result == -1) {
-            const err: any = new Error(`Error ${error} running ioctl`)
-
-            err.code = error
-
-            reject(err)
-        } else {
-            resolve(result)
-        }
-    }
-}
-
-function pointer(ptr: undefined | MaybeBufferPointer) {
+function pointer(ptr: undefined | number | bigint | Buffer) {
     if (ptr === undefined || ptr === null) {
         return BigInt(0)
     }
