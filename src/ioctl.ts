@@ -54,11 +54,11 @@ export namespace ioctl {
                         BigInt(request),
                         pointer(data),
                     ]),
-                    (results: [error: number, result: number][]) => {
+                    (results: [code: number, result: number][]) => {
                         try {
                             resolve(
                                 results.map(([code, result], index) => {
-                                    if (result == -1) {
+                                    if (code != 0 || result == -1) {
                                         const [fd, request] = calls[index]
 
                                         throw new Error({ fd, code, request })
@@ -96,7 +96,7 @@ export namespace ioctl {
                     requestInt,
                     pointer(data),
                     (code: number, result: number) => {
-                        if (result == -1) {
+                        if (code != 0 || result == -1) {
                             reject(new Error({ fd, code, request: requestInt }))
                         } else {
                             resolve(result)
