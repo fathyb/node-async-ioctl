@@ -114,7 +114,7 @@ namespace NodeAsyncIoctl {
                     results->Set(context, i, result).Check();
                 }
 
-                data->callback.Call(length, argv, &data->async_resource);
+                data->callback.Call(1, argv, &data->async_resource);
 
                 delete[] params;
                 delete data;
