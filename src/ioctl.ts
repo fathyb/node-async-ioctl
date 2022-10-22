@@ -2,6 +2,9 @@ import { constants } from 'os'
 
 import native from '../native/build/Release/ioctl.node'
 
+export type MaybeBigInt = number | bigint
+export type MaybeBuffer = MaybeBigInt | Buffer | ArrayBufferView
+
 /**
  * Perform an `ioctl` syscall using the libuv thread pool.
  * Meant for immediate `ioctl` calls.
@@ -9,7 +12,7 @@ import native from '../native/build/Release/ioctl.node'
 export async function ioctl(
     fd: number,
     request: number | bigint,
-    data?: number | bigint | Buffer,
+    data?: MaybeBuffer,
 ) {
     const [result] = await ioctl.batch([fd, request, data])
 
@@ -50,11 +53,7 @@ export namespace ioctl {
     }
 
     export async function batch(
-        ...calls: [
-            fd: number,
-            request: number | bigint,
-            data?: number | bigint | Buffer,
-        ][]
+        ...calls: [fd: number, request: number | bigint, data?: MaybeBuffer][]
     ) {
         return await new Promise<number[]>((resolve, reject) => {
             try {
@@ -95,7 +94,7 @@ export namespace ioctl {
     export async function blocking(
         fd: number,
         request: number | bigint,
-        data?: number | bigint | Buffer,
+        data?: MaybeBuffer,
     ) {
         return await new Promise<number>((resolve, reject) => {
             try {
@@ -120,7 +119,7 @@ export namespace ioctl {
     }
 }
 
-function pointer(ptr: undefined | number | bigint | Buffer) {
+function pointer(ptr: undefined | MaybeBuffer) {
     if (ptr === undefined || ptr === null) {
         return BigInt(0)
     }
@@ -131,6 +130,10 @@ function pointer(ptr: undefined | number | bigint | Buffer) {
 
     if (typeof ptr === 'number') {
         return BigInt(ptr)
+    }
+
+    if (ArrayBuffer.isView(ptr)) {
+        return Buffer.from(ptr.buffer)
     }
 
     throw new Error('Unsupported ioctl pointer value')
