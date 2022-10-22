@@ -1,3 +1,5 @@
+import { constants } from 'os'
+
 import native from '../native/build/Release/ioctl.node'
 
 /**
@@ -15,11 +17,15 @@ export async function ioctl(
 }
 
 const BaseError = Error
+const errorNames = new Map(
+    Object.entries(constants.errno).map(([name, value]) => [value, name]),
+)
 
 export namespace ioctl {
     export class Error extends BaseError {
         public readonly fd: number
-        public readonly code: number
+        public readonly code: number | string
+        public readonly errno: number
         public readonly request: bigint
 
         constructor({
@@ -31,10 +37,14 @@ export namespace ioctl {
             code: number
             request: number | bigint
         }) {
-            super(`error ${code} running ioctl(${fd}, ${request})`)
+            const name = errorNames.get(code)
+            const desc = name ? `${name} (${code})` : code
+
+            super(`error ${desc} running ioctl(${fd}, ${request})`)
 
             this.fd = fd
-            this.code = code
+            this.code = name ?? code
+            this.errno = code
             this.request = BigInt(request)
         }
     }
